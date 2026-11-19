@@ -1,6 +1,5 @@
 import { SymbolKind } from "vscode";
 import { extSettings } from "./settings";
-import { writeToOutput } from "./output";
 
 const DESC_FALLBACK = "(Undocumented)";
 

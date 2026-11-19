@@ -1,7 +1,6 @@
 import { FileSystemWatcher, Uri, window, workspace } from "vscode";
 import { extSettings } from "./settings";
 import { readdir } from "fs/promises";
-import { writeToOutput } from "./output";
 import { join } from "path";
 
 export class GodotXMLWatcher {

@@ -18,7 +18,7 @@ export class GodotXMLHoverProvider implements HoverProvider {
         [methodRegex, (m1: any, d: any, m2: any) => this.docsParser.getMethodDescription(m1, d, m2)],
         [propertyRegex, (m1: any, d: any, m2: any) => this.docsParser.getPropertyDescription(m1, d, m2)],
         [constantRegex, (m1: any, d: any, m2: any) => this.docsParser.getConstantDescription(m1, d, m2)],
-    ] as const;
+    ];
 
     constructor(
         public docsParser: DocsParser,

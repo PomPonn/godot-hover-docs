@@ -1,7 +1,6 @@
 import { Uri, workspace } from "vscode";
 import { XMLParser } from "fast-xml-parser";
 import { TextDecoder } from "util";
-import { writeToOutput } from "./output";
 
 const fileToClassnameRegex = /\/([^\/]+)\.xml$/i;
 
