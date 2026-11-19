@@ -1,3 +1,10 @@
+## 0.2.0
+
+- Now works with godot-cpp (GDExtension).
+- Added a few configuration options.
+- Descriptions for costants.
+- Optimalization and other improvements.
+
 ## 0.1.0
 
 - Now properly handles pointers, references and generic types.
