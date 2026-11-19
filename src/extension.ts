@@ -1,20 +1,25 @@
-import { commands, ExtensionContext, languages, SymbolInformation, SymbolKind, TextEditorRevealType, window, workspace } from 'vscode';
+import { commands, ExtensionContext, languages, SymbolInformation, SymbolKind, window, workspace } from 'vscode';
 import { GodotXMLHoverProvider } from './hover_provider';
 import { GodotXMLCache } from './xml_cache';
 import { GodotXMLWatcher } from './xml_watcher';
-import { DocsParser } from './docs_parsing';
+import { DocsParser } from './docs_parser';
+import { extSettings } from './settings';
 
 export function activate(context: ExtensionContext) {
-	const docsParser = new DocsParser();
+
 	const xmlCache = new GodotXMLCache();
-	const xmlWatcher = new GodotXMLWatcher((file, exists) => {
-		xmlCache.updateXML(file, exists);
-		// TODO: This line could be skipped when XMLWatcher initializes, to save redundant getClassnames() calls.
-		docsParser.validClassnames = xmlCache.getClassnames();
-	});
+	const docsParser = new DocsParser(() => xmlCache.getClassnames());
+	const xmlWatcher = new GodotXMLWatcher((file, exists) => xmlCache.updateXML(file, exists));
+
 	context.subscriptions.push(xmlWatcher);
 
 	commands.registerCommand('godot-hover-docs.followLink', async ({ classname, symbol, kind }) => {
+
+		// No follow links when working on GDExtension
+		if (extSettings.isGdExtension()) {
+			return;
+		}
+
 		const symbols = (await commands.executeCommand<SymbolInformation[]>('vscode.executeWorkspaceSymbolProvider', symbol)) ?? [];
 
 		const matchesKind = (filter: SymbolKind, actual: SymbolKind) => {
@@ -67,11 +72,9 @@ export function activate(context: ExtensionContext) {
 		}
 	});
 
-	languages.registerHoverProvider([
-		{ language: "cpp" }, { language: "h" }
-	], new GodotXMLHoverProvider(
-		docsParser,
-		(name) => xmlCache.findXML(name)),
+	languages.registerHoverProvider(
+		[{ language: "cpp" }],
+		new GodotXMLHoverProvider(docsParser, classname => xmlCache.findXML(classname)),
 	);
 
 	workspace.onDidChangeWorkspaceFolders(() => {

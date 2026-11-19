@@ -18,10 +18,26 @@
     "Education"
   ],
   "activationEvents": [
-    "workspaceContains:editor/icons/Godot.svg"
+    "workspaceContains:editor/icons/Godot.svg",
+    "workspaceContains:godot-cpp"
   ],
   "main": "./out/extension.js",
-  "contributes": {},
+  "contributes": {
+    "configuration": {
+      "title": "Godot Hover Docs",
+      "properties": {
+        "godotHoverDocs.verbose": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to show verbose description."
+        },
+        "godotHoverDocs.externalDocsDirectory": {
+          "type": "string",
+          "description": "Absolute path to the directory containg .xml classes documentation. Used when there is no local-workspace documentation. (Restart extension to apply)"
+        }
+      }
+    }
+  },
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",

@@ -1,29 +1,42 @@
 import { CancellationToken, commands, Hover, HoverProvider, MarkdownString, Position, TextDocument } from 'vscode';
 import { DocsData } from './xml_cache';
-import { DocsParser } from './docs_parsing';
+import { DocsParser } from './docs_parser';
+import { clearOutput, writeToOutput } from './output';
+import { extSettings } from './settings';
 
-const sanitizeRegex = /\*|&|<[^<>]+>/g;
-const classRegex = /^```cpp\s+class\s(\S+?)\s+```$/s;
-const methodRegex = /^```cpp.+?(\S+?)::(?:Data::)?(\S+?)\(/s;
-const propertyRegex = /^```cpp.+?(\S+?)::(?:Data::)?(\S+?)\s+```$/s;
+const sanitizeRegex = /^```cpp\s*|\s*```.*$|\*|&|<[^<>]+>/gs;
+const godotNamespaceRegex = /godot::/g;
+const classRegex = /^(?:class|struct)\s(\S+?)$/;
+const methodRegex = /^.+?(\S+?)::*?([^\s:]+)\(/;
+const propertyRegex = /^.+?(\S+?)::.*?(?<=::)([^\s:()]+)$/;
+const constantRegex = /^.+?(\S+?)::.*?(?<=::)([^\s:()]+)\s=/
 
 export class GodotXMLHoverProvider implements HoverProvider {
     isQuerying = false;
+    readonly detectionPasses: [RegExp, any][] = [
+        [classRegex, (m1: any, d: any, _: any) => this.docsParser.getClassDescription(m1, d)],
+        [methodRegex, (m1: any, d: any, m2: any) => this.docsParser.getMethodDescription(m1, d, m2)],
+        [propertyRegex, (m1: any, d: any, m2: any) => this.docsParser.getPropertyDescription(m1, d, m2)],
+        [constantRegex, (m1: any, d: any, m2: any) => this.docsParser.getConstantDescription(m1, d, m2)],
+    ] as const;
 
     constructor(
         public docsParser: DocsParser,
         public findXML: (classname: string) => Promise<DocsData | undefined>,
-    ) {}
+    ) { }
 
-    async provideHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | null | undefined> {
+    async provideHover(document: TextDocument, position: Position, _: CancellationToken): Promise<Hover | null | undefined> {
+        clearOutput();
+
         if (this.isQuerying) {
             return;
         }
+
         this.isQuerying = true;
         const hovers = await commands.executeCommand<Hover[]>("vscode.executeHoverProvider", document.uri, position);
         this.isQuerying = false;
 
-        // Check hovers for a method like `TypeA TypeB::methodname(...)`.
+        // Check hovers for matches.
         const contents: MarkdownString[] = [];
         for (const hover of hovers) {
             for (const content of hover.contents) {
@@ -34,14 +47,24 @@ export class GodotXMLHoverProvider implements HoverProvider {
                     value = content;
                 }
 
-                // Remove all pointers, references and generic types.
+                if (extSettings.isGdExtension()) {
+                    // Remove godot namespaces for easier parsing.
+                    const newValue = value.replace(godotNamespaceRegex, '');
+                    if (newValue === value) {
+                        // There is no reason to continue parsing, because this hover content has no trace of godot namespace.
+                        continue;
+                    }
+                    value = newValue;
+                }
+
+                // Remove all pointers, references, generic types and godot namespace if using GDExtension.
                 // Since generic types can be recursive, we keep applying the regex until we reach
                 // a stable value.
                 value = this.sanitizeValue(value);
+                writeToOutput("[Value]: " + value);
 
-                const toTryList = ["detectClass", "detectMethod", "detectProperty"] as const;
-                for (const toTry of toTryList) {
-                    const result = await this[toTry](value);
+                for (const pass of this.detectionPasses) {
+                    const result = await this.detect(value, pass[0], pass[1]);
                     if (result !== undefined) {
                         const md = new MarkdownString(result);
                         md.isTrusted = { enabledCommands: ['godot-hover-docs.followLink'] };
@@ -52,6 +75,7 @@ export class GodotXMLHoverProvider implements HoverProvider {
                 break;
             }
         }
+
         return { contents };
     }
 
@@ -63,42 +87,25 @@ export class GodotXMLHoverProvider implements HoverProvider {
             }
             text = newText;
         }
+
         return text;
     }
 
-    async detectClass(text: string): Promise<string | undefined> {
-        const match = classRegex.exec(text);
+    async detect(text: string, regex: RegExp, descriptionGetter: any) {
+        const match = regex.exec(text);
         if (!match) {
             return undefined;
         }
-        const docs = await this.findXML(match[1]);
-        if (!docs?.class) {
-            return undefined;
-        }
-        return this.docsParser.getClassDescription(match[1], docs);
-    }
 
-    async detectMethod(text: string): Promise<string | undefined> {
-        const match = methodRegex.exec(text);
-        if (!match) {
-            return undefined;
-        }
-        const docs = await this.findXML(match[1]);
-        if (!docs?.class) {
-            return undefined;
-        }
-        return this.docsParser.getMethodDescription(match[1], docs, match[2]);
-    }
+        writeToOutput("[DETECT] Matched: " + match[1] + (match[2] ? ", " + match[2] : ""));
 
-    async detectProperty(text: string): Promise<string | undefined> {
-        const match = propertyRegex.exec(text);
-        if (!match) {
-            return undefined;
-        }
         const docs = await this.findXML(match[1]);
         if (!docs?.class) {
             return undefined;
         }
-        return this.docsParser.getPropertyDescription(match[1], docs, match[2]);
+
+        writeToOutput("[DETECT] Found class");
+
+        return descriptionGetter(match[1], docs, match[2]);
     }
 }

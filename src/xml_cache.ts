@@ -1,14 +1,22 @@
 import { Uri, workspace } from "vscode";
 import { XMLParser } from "fast-xml-parser";
 import { TextDecoder } from "util";
+import { writeToOutput } from "./output";
 
 const fileToClassnameRegex = /\/([^\/]+)\.xml$/i;
 
 export class GodotXMLCache {
-    /** `true` if file exists, `false` if file is deleted, docs data otherwise. `undefined` means we don't know about this file. */
+    /**
+     * `true` if file exists, `false` if file is deleted, docs data otherwise. `undefined` means we don't know about this file.
+     * */
     private _cache: Record<string, boolean | DocsData> = {};
+    private _classnames: string[] = [];
 
     async findXML(classname: string): Promise<DocsData | undefined> {
+        if (!this._classnames.includes(classname)) {
+            return undefined;
+        }
+
         classname = "/" + classname.toLowerCase() + ".xml";
         for (const key in this._cache) {
             if (key.toLowerCase().endsWith(classname)) {
@@ -39,14 +47,18 @@ export class GodotXMLCache {
     }
 
     updateXML(file: Uri, exists: boolean) {
-        // Hello cache
-        this._cache[file.toString()] = exists;
+        const filename = file.toString();
+        this._cache[filename] = exists;
+
+        const classname = filename.match(fileToClassnameRegex)?.[1] ?? "";
+        // Push new classname if doesn't exists
+        if (classname !== "" && !this._classnames.includes(classname)) {
+            this._classnames.push(classname);
+        }
     }
 
     getClassnames(): string[] {
-        return Object.keys(this._cache)
-            .map(filename => filename.match(fileToClassnameRegex)?.[1])
-            .filter((classname): classname is string => !!classname);
+        return this._classnames;
     }
 }
 
